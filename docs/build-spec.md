@@ -163,7 +163,7 @@ All JSON. Errors are `{ "error": string, "details"?: string[] }`.
   - Left: the result, in tabs for Form preview, TypeScript, and JSON Schema.
   - Right: revision history (version, time, attempts, latency, input/output tokens, a short prompt excerpt, Restore button).
 - **State:** plain React state plus one small `api.ts` module. No state library.
-- **Loading and errors:** disable the button while generating. Show 422 details as a readable list.
+- **Loading and errors:** disable the Generate button while generating, and the Restore buttons while a restore runs. Restore has no idempotency key, so this is what stops a double-click from saving two copies. Show 422 details as a readable list.
 - **Error boundary:** wrap the preview, so a bad render shows a message instead of a blank page.
 - **Accessibility:**
   - every input has a label

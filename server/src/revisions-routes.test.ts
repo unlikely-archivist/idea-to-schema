@@ -118,4 +118,34 @@ describe("simultaneous revisions for the same spec", () => {
     // Versions 1..n with no gaps or repeats, one per successful request.
     expect(versions).toEqual(Array.from({ length: created + 1 }, (_, i) => i + 1));
   });
+
+  // The test above may not collide on every run, so this one forces the collision.
+  it("returns 409 when another request saves the same version first", async () => {
+    const { app, specId, saved } = await specWithRevisions(1);
+
+    // Hold version 2 in an open transaction. The restore can't see it, so it also picks version 2.
+    const other = await db.$client.connect();
+    try {
+      await other.query("BEGIN");
+      await other.query(
+        "INSERT INTO revisions (spec_id, version, prompt, spec_json, attempts) VALUES ($1, 2, 'other', $2, 0)",
+        [specId, JSON.stringify(validSpec)],
+      );
+
+      const pending = restore(app, specId, saved[0].id);
+      // Commit only once the restore is blocked waiting on the version constraint.
+      await expect.poll(async () => {
+        const { rows } = await other.query("SELECT count(*)::int AS n FROM pg_locks WHERE NOT granted");
+        return rows[0].n;
+      }).toBeGreaterThan(0);
+      await other.query("COMMIT");
+
+      const res = await pending;
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({ error: expect.stringContaining("Refresh and try again") });
+    } finally {
+      other.release();
+    }
+    expect(await db.select().from(revisions)).toHaveLength(2);
+  });
 });
