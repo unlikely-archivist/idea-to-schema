@@ -177,7 +177,7 @@ All JSON. Errors are `{ "error": string, "details"?: string[] }`.
 
 ## Secrets and config
 
-- `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` (Workers AI permission only), `DATABASE_URL`, and `TEST_DATABASE_URL` go in `server/.env`. Commit `.env.example` and keep `.env` in `.gitignore`.
+- `WORKERS_AI_ACCOUNT_ID`, `WORKERS_AI_API_TOKEN` (Workers AI permission only), `DATABASE_URL`, and `TEST_DATABASE_URL` go in `server/.env`. Commit `.env.example` and keep `.env` in `.gitignore`.
 - Never log the API token or full prompts in CI output.
 
 ## Tests (Vitest, real Postgres)

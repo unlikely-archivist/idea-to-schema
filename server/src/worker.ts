@@ -8,8 +8,8 @@ import { createWorkersAiGenerator } from "./generate/workers-ai-generator.js";
 interface Env {
   HYPERDRIVE: { connectionString: string };
   RATE_LIMITER: { limit(options: { key: string }): Promise<{ success: boolean }> };
-  CLOUDFLARE_ACCOUNT_ID: string;
-  CLOUDFLARE_API_TOKEN: string;
+  WORKERS_AI_ACCOUNT_ID: string;
+  WORKERS_AI_API_TOKEN: string;
 }
 
 interface ExecutionContext {
@@ -26,7 +26,7 @@ export default {
     try {
       const app = createApp(
         drizzle(client, { schema }),
-        createWorkersAiGenerator({ accountId: env.CLOUDFLARE_ACCOUNT_ID, apiToken: env.CLOUDFLARE_API_TOKEN }),
+        createWorkersAiGenerator({ accountId: env.WORKERS_AI_ACCOUNT_ID, apiToken: env.WORKERS_AI_API_TOKEN }),
         {
           allowRequest: async (ip) => (await env.RATE_LIMITER.limit({ key: ip })).success,
           dailyCap: DAILY_GENERATION_CAP,
