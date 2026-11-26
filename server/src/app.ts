@@ -41,6 +41,12 @@ export function createApp(db: Db, generateSpec: SpecGenerator, limits: Limits = 
     await next();
   });
 
+  // Keep the { error } shape for unexpected failures too, such as the database being unreachable.
+  app.onError((err, c) => {
+    console.error(err);
+    return c.json({ error: "Something went wrong on the server. Try again." }, 500);
+  });
+
   app.get("/api/health", (c) => c.json({ ok: true }));
 
   app.post("/api/specs", async (c) => {

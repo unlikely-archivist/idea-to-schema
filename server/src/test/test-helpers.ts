@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { createDb, type Db } from "../db/client.js";
 import type { GeneratorResult, Message, SpecGenerator } from "../generate/spec-generator.js";
 
-export function createTestDb() {
+export function createTestDb(): Db {
   if (existsSync(".env")) process.loadEnvFile();
   return createDb(process.env.TEST_DATABASE_URL!);
 }

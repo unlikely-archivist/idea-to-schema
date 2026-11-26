@@ -1,7 +1,5 @@
-import { drizzle } from "drizzle-orm/node-postgres";
-import { Client } from "pg";
 import { createApp, DAILY_GENERATION_CAP } from "./app.js";
-import * as schema from "./db/schema.js";
+import { createDb } from "./db/client.js";
 import { createWorkersAiGenerator } from "./generate/workers-ai-generator.js";
 
 // The bindings and secrets set in wrangler.jsonc and with `wrangler secret put`.
@@ -19,13 +17,14 @@ interface ExecutionContext {
 // Cloudflare entry point. Only /api/* reaches this code; the built page is served as static assets.
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    // One client per request: Workers can't reuse a connection across requests.
+    // A new pool per request: Workers can't reuse a connection across requests.
+    // The pool connects on its first query, so requests refused before touching the
+    // database (rate limit, bad input, health check) never open a connection.
     // Hyperdrive keeps the real connections to Postgres warm, so connecting is fast.
-    const client = new Client({ connectionString: env.HYPERDRIVE.connectionString });
-    await client.connect();
+    const db = createDb(env.HYPERDRIVE.connectionString);
     try {
       const app = createApp(
-        drizzle(client, { schema }),
+        db,
         createWorkersAiGenerator({ accountId: env.WORKERS_AI_ACCOUNT_ID, apiToken: env.WORKERS_AI_API_TOKEN }),
         {
           allowRequest: async (ip) => (await env.RATE_LIMITER.limit({ key: ip })).success,
@@ -34,7 +33,7 @@ export default {
       );
       return await app.fetch(request);
     } finally {
-      ctx.waitUntil(client.end());
+      ctx.waitUntil(db.$client.end());
     }
   },
 };

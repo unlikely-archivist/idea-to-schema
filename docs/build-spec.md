@@ -41,7 +41,7 @@ Verify current stable versions when installing; don't pin from memory.
 - **AI:** Cloudflare Workers AI, called over its REST API with `fetch` (no SDK). See "Model choice" below.
 - **Tests:** Vitest.
 - **Layout:** one repo, two folders: `web/` and `server/`. No monorepo tooling.
-- **Hosting:** Cloudflare Workers serves the built page as static assets and runs the API from `server/src/worker.ts`. Postgres is Neon's free tier, reached through Hyperdrive (free up to 100,000 queries a day). Render's free tier was ruled out because it sleeps after 15 idle minutes; Fly.io now needs a card. Checked 2026-11-25.
+- **Hosting:** Cloudflare Workers serves the built page as static assets and runs the API from `server/src/worker.ts`. Postgres is Neon's free tier, reached through Hyperdrive (free up to 100,000 queries a day) with query caching off, since cached reads aren't cleared on writes and would break the idempotency lookup. Render's free tier was ruled out because it sleeps after 15 idle minutes; Fly.io now needs a card. Checked 2026-11-25.
 
 Machine: 2019 Intel MacBook Pro, 16 GB RAM. Docker Desktop is fine. Keep it light.
 

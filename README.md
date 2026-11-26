@@ -43,13 +43,13 @@ The live site runs on Cloudflare Workers with Postgres on Neon, connected throug
 
 ```sh
 npx wrangler login
-npx wrangler hyperdrive create idea-to-schema --connection-string="<Neon direct connection string>"
+npx wrangler hyperdrive create idea-to-schema --connection-string="<Neon direct connection string>" --caching-disabled
 DATABASE_URL="<same string>" npm run db:migrate
 npx wrangler secret put WORKERS_AI_ACCOUNT_ID
 npx wrangler secret put WORKERS_AI_API_TOKEN
 ```
 
-Then `npm run deploy` builds the page and deploys the Worker. Run `db:migrate` against Neon again whenever a new migration is added.
+Caching is off because Hyperdrive caches reads for 60 seconds and does not clear them on writes, which would break the idempotency lookup. Then `npm run deploy` builds the page and deploys the Worker. Run `db:migrate` against Neon again whenever a new migration is added.
 
 ## Decisions
 
