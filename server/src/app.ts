@@ -1,5 +1,5 @@
-import { and, eq } from "drizzle-orm";
-import { Hono } from "hono";
+import { and, desc, eq } from "drizzle-orm";
+import { Hono, type Context } from "hono";
 import { z } from "zod";
 import type { Db } from "./db/client.js";
 import { insertRevision, uniqueViolation, type Revision } from "./db/insert-revision.js";
@@ -71,14 +71,61 @@ export function createApp(db: Db, generateSpec: SpecGenerator) {
         const winner = await findByIdempotencyKey(db, specId, idempotencyKey);
         if (winner) return c.json(toResponse(winner), 200);
       }
-      if (constraint === "revisions_spec_id_version_unique") {
-        return c.json({ error: "Another revision was saved at the same time. Refresh and try again." }, 409);
-      }
+      if (constraint === VERSION_CONSTRAINT) return versionConflict(c);
+      throw err;
+    }
+  });
+
+  app.get("/api/specs/:id/revisions", async (c) => {
+    const specId = c.req.param("id");
+    if (!Uuid.safeParse(specId).success) return c.json({ error: "Spec not found" }, 404);
+
+    const spec = await db.query.specs.findFirst({ where: eq(specs.id, specId) });
+    if (!spec) return c.json({ error: "Spec not found" }, 404);
+
+    const rows = await db.query.revisions.findMany({
+      where: eq(revisions.specId, specId),
+      orderBy: desc(revisions.version),
+    });
+    return c.json(rows.map(toResponse), 200);
+  });
+
+  app.post("/api/specs/:id/revisions/:revId/restore", async (c) => {
+    const specId = c.req.param("id");
+    const revId = c.req.param("revId");
+    if (!Uuid.safeParse(specId).success || !Uuid.safeParse(revId).success) {
+      return c.json({ error: "Revision not found" }, 404);
+    }
+
+    // Matching on spec_id too stops a revision from one spec being restored into another.
+    const source = await db.query.revisions.findFirst({
+      where: and(eq(revisions.id, revId), eq(revisions.specId, specId)),
+    });
+    if (!source) return c.json({ error: "Revision not found" }, 404);
+
+    // A restore is a new row that copies the old one; the old row is never edited.
+    try {
+      const row = await insertRevision(db, {
+        specId,
+        prompt: source.prompt,
+        specJson: source.specJson,
+        restoredFrom: source.id,
+        attempts: 0,
+      });
+      return c.json(toResponse(row), 201);
+    } catch (err) {
+      if (uniqueViolation(err) === VERSION_CONSTRAINT) return versionConflict(c);
       throw err;
     }
   });
 
   return app;
+}
+
+const VERSION_CONSTRAINT = "revisions_spec_id_version_unique";
+
+function versionConflict(c: Context) {
+  return c.json({ error: "Another revision was saved at the same time. Refresh and try again." }, 409);
 }
 
 function findByIdempotencyKey(db: Db, specId: string, idempotencyKey: string) {
