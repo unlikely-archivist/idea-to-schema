@@ -13,6 +13,7 @@ Interviews will ask Eryn to defend this code. So:
 - Build in the order below, one step at a time. After each step, explain in plain words what was built and why, and wait for Eryn to say go.
 - Prefer boring, readable code over clever code. No abstractions for single-use code.
 - Eryn writes the README's "Decisions" section in their own words. Draft notes for it if asked; don't write the final version.
+- One branch and PR per step. Eryn reviews and merges. On the PRs for steps 4, 5, 6, and 10 (retry and idempotency, concurrency, the Claude adapter, deploy security), run the `typescript-reviewer` agent first and answer its comments in the PR. Skip it on the other steps.
 
 ## Scope
 
