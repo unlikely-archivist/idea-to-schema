@@ -1,9 +1,9 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import type { Db } from "./db/client.js";
 import { insertRevision, uniqueViolation, type Revision } from "./db/insert-revision.js";
-import { revisions, specs } from "./db/schema.js";
+import { dailyUsage, revisions, specs } from "./db/schema.js";
 import { generateWithRepair } from "./generate/generate-with-repair.js";
 import type { SpecGenerator } from "./generate/spec-generator.js";
 import { toJsonSchema, toTypeScript } from "./spec/generators.js";
@@ -11,9 +11,35 @@ import { toJsonSchema, toTypeScript } from "./spec/generators.js";
 const GenerateBody = z.object({ prompt: z.string().min(1).max(2000) });
 const Uuid = z.uuid();
 
-// Dependencies are passed in so tests can use a test database and a fake generator.
-export function createApp(db: Db, generateSpec: SpecGenerator) {
+// Keeps the live demo inside Workers AI's free 10,000 neurons a day. GLM-4.7-Flash costs
+// 5,500 neurons per million input tokens and 36,400 per million output tokens (checked 2026-11-25).
+// A typical generation (371 in, 540 out) is about 22 neurons; with a repair retry, about 50.
+// 150 worst-case generations is about 7,500 neurons.
+export const DAILY_GENERATION_CAP = 150;
+
+export interface Limits {
+  // Per-IP rate limit on POST requests. Returns false when the IP is over its limit.
+  allowRequest: (ip: string) => Promise<boolean>;
+  dailyCap: number;
+}
+
+// Local dev has no rate limiter; the Worker passes Cloudflare's (see worker.ts).
+const defaultLimits: Limits = { allowRequest: async () => true, dailyCap: DAILY_GENERATION_CAP };
+
+// Dependencies are passed in so tests can use a test database, a fake generator, and test limits.
+export function createApp(db: Db, generateSpec: SpecGenerator, limits: Limits = defaultLimits) {
   const app = new Hono();
+
+  // POST routes write rows, so they are rate limited. Cloudflare sets CF-Connecting-IP.
+  app.use("/api/*", async (c, next) => {
+    if (c.req.method === "POST") {
+      const ip = c.req.header("CF-Connecting-IP") ?? "unknown";
+      if (!(await limits.allowRequest(ip))) {
+        return c.json({ error: "Too many requests. Wait a minute and try again." }, 429);
+      }
+    }
+    await next();
+  });
 
   app.get("/api/health", (c) => c.json({ ok: true }));
 
@@ -43,6 +69,11 @@ export function createApp(db: Db, generateSpec: SpecGenerator) {
     // Replay: this click was already handled, so return it without calling the model.
     const existing = await findByIdempotencyKey(db, specId, idempotencyKey);
     if (existing) return c.json(toResponse(existing), 200);
+
+    // Counted before the model call, because failed attempts use neurons too.
+    if (!(await reserveDailyGeneration(db, limits.dailyCap))) {
+      return c.json({ error: "The demo's daily generation limit is reached. Try again after 00:00 UTC." }, 429);
+    }
 
     const result = await generateWithRepair(body.data.prompt, generateSpec);
     if (!result.ok) {
@@ -126,6 +157,21 @@ const VERSION_CONSTRAINT = "revisions_spec_id_version_unique";
 
 function versionConflict(c: Context) {
   return c.json({ error: "Another revision was saved at the same time. Refresh and try again." }, 409);
+}
+
+// Adds one to today's count unless it has reached the cap. One statement, so two
+// simultaneous requests can't both take the last slot. Returns false at the cap.
+async function reserveDailyGeneration(db: Db, cap: number) {
+  const rows = await db
+    .insert(dailyUsage)
+    .values({ day: sql`(now() at time zone 'utc')::date`, generations: 1 })
+    .onConflictDoUpdate({
+      target: dailyUsage.day,
+      set: { generations: sql`${dailyUsage.generations} + 1` },
+      setWhere: sql`${dailyUsage.generations} < ${cap}`,
+    })
+    .returning();
+  return rows.length > 0;
 }
 
 function findByIdempotencyKey(db: Db, specId: string, idempotencyKey: string) {

@@ -6,7 +6,8 @@
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "test": "vitest run"
+    "test": "vitest run",
+    "deploy": "npm run build --prefix ../web && wrangler deploy"
   },
   "type": "module",
   "private": true,
@@ -23,7 +24,8 @@
     "drizzle-kit": "^0.31.11",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "vitest": "^5.1.2"
+    "vitest": "^5.1.2",
+    "wrangler": "^4.168.0"
   },
   "allowScripts": {
     "esbuild": false

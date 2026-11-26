@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "../app.js";
-import { revisions } from "../db/schema.js";
+import { createApp, type Limits } from "../app.js";
+import { dailyUsage, revisions } from "../db/schema.js";
 import { createTestDb, fakeGenerator, invalidSpec, NO_TOOL_CALL, truncateAll, validSpec } from "../test/test-helpers.js";
 import { MAX_ATTEMPTS } from "./generate-with-repair.js";
 import type { SpecGenerator } from "./spec-generator.js";
@@ -11,8 +11,8 @@ const db = createTestDb();
 beforeEach(() => truncateAll(db));
 afterAll(() => db.$client.end());
 
-async function createSpec(generateSpec: SpecGenerator) {
-  const app = createApp(db, generateSpec);
+async function createSpec(generateSpec: SpecGenerator, limits?: Limits) {
+  const app = createApp(db, generateSpec, limits);
   const res = await app.request("/api/specs", { method: "POST" });
   const { id } = (await res.json()) as { id: string };
   return { app, specId: id };
@@ -152,5 +152,45 @@ describe("POST /api/specs/:id/generate", () => {
     expect((await generate(app, randomUUID(), key, { prompt: "x" })).status).toBe(404);
     expect((await generate(app, "not-a-uuid", key, { prompt: "x" })).status).toBe(404);
     expect(fake.calls).toHaveLength(0);
+  });
+});
+
+describe("limits", () => {
+  const allowAll = async () => true;
+
+  it("stops at the daily cap without calling the model", async () => {
+    const fake = fakeGenerator([validSpec, validSpec]);
+    const { app, specId } = await createSpec(fake.generateSpec, { allowRequest: allowAll, dailyCap: 1 });
+
+    const first = await generate(app, specId, randomUUID(), { prompt: "a pottery waitlist" });
+    const second = await generate(app, specId, randomUUID(), { prompt: "a pottery waitlist" });
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(429);
+    expect(await second.json()).toEqual({ error: expect.stringContaining("daily generation limit") });
+    expect(fake.calls).toHaveLength(1);
+  });
+
+  it("still replays a saved click when the cap is reached, without counting it", async () => {
+    const fake = fakeGenerator([validSpec]);
+    const { app, specId } = await createSpec(fake.generateSpec, { allowRequest: allowAll, dailyCap: 1 });
+    const key = randomUUID();
+
+    await generate(app, specId, key, { prompt: "a pottery waitlist" });
+    const replay = await generate(app, specId, key, { prompt: "a pottery waitlist" });
+
+    expect(replay.status).toBe(200);
+    expect(await db.select().from(dailyUsage)).toEqual([{ day: expect.any(String), generations: 1 }]);
+  });
+
+  it("returns 429 on POST when the rate limiter refuses, and leaves GET alone", async () => {
+    const fake = fakeGenerator([]);
+    const app = createApp(db, fake.generateSpec, { allowRequest: async () => false, dailyCap: 1 });
+
+    const post = await app.request("/api/specs", { method: "POST" });
+    const get = await app.request(`/api/specs/${randomUUID()}/revisions`);
+
+    expect(post.status).toBe(429);
+    expect(get.status).toBe(404);
   });
 });

@@ -3,13 +3,13 @@ import { sql } from "drizzle-orm";
 import { createDb, type Db } from "../db/client.js";
 import type { GeneratorResult, Message, SpecGenerator } from "../generate/spec-generator.js";
 
-export function createTestDb(): Db {
+export function createTestDb() {
   if (existsSync(".env")) process.loadEnvFile();
   return createDb(process.env.TEST_DATABASE_URL!);
 }
 
 export async function truncateAll(db: Db) {
-  await db.execute(sql`TRUNCATE revisions, specs`);
+  await db.execute(sql`TRUNCATE revisions, specs, daily_usage`);
 }
 
 // Pass this in place of a tool input to make the fake reply without calling define_spec.
