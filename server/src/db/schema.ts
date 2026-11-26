@@ -8,6 +8,7 @@ import {
   uuid,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
+import type { Spec } from "../spec/gate.js";
 
 export const specs = pgTable("specs", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -24,7 +25,7 @@ export const revisions = pgTable(
       .references(() => specs.id),
     version: integer("version").notNull(),
     prompt: text("prompt").notNull(),
-    specJson: jsonb("spec_json").notNull(),
+    specJson: jsonb("spec_json").$type<Spec>().notNull(),
     restoredFrom: uuid("restored_from").references((): AnyPgColumn => revisions.id),
     idempotencyKey: text("idempotency_key"),
     attempts: integer("attempts").notNull(),
