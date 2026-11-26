@@ -107,6 +107,17 @@ function parseArguments(args: string): unknown {
   try {
     return JSON.parse(args);
   } catch {
-    return args;
+    return args.trimStart().startsWith("<tool_call>") ? parseGlmToolCall(args) : args;
   }
+}
+
+// Workers AI sometimes skips converting GLM's native tool-call text to JSON and returns
+// it as-is: <tool_call>name<arg_key>k</arg_key><arg_value>v</arg_value>...</tool_call>.
+// GLM writes string values raw and arrays or objects as JSON.
+function parseGlmToolCall(text: string): unknown {
+  const input: Record<string, unknown> = {};
+  for (const [, key, value] of text.matchAll(/<arg_key>([\s\S]*?)<\/arg_key>\s*<arg_value>([\s\S]*?)<\/arg_value>/g)) {
+    input[key.trim()] = /^\s*[[{]/.test(value) ? parseArguments(value) : value;
+  }
+  return input;
 }

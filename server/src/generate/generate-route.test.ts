@@ -68,6 +68,20 @@ describe("POST /api/specs/:id/generate", () => {
     expect(fake.calls[1][1]).toEqual({ role: "user", content: expect.stringContaining("define_spec") });
   });
 
+  it("sends the errors as a user message when the tool input isn't an object", async () => {
+    // A real model sent arguments that weren't a JSON object. Echoing that back as a
+    // tool call made Workers AI reject the retry with a 400.
+    const fake = fakeGenerator(["{not valid json", validSpec]);
+    const { app, specId } = await createSpec(fake.generateSpec);
+
+    const res = await generate(app, specId, randomUUID(), { prompt: "a pottery waitlist" });
+
+    expect(res.status).toBe(201);
+    expect((await res.json()).attempts).toBe(2);
+    expect(fake.calls[1]).toHaveLength(2);
+    expect(fake.calls[1][1]).toEqual({ role: "user", content: expect.stringContaining("input:") });
+  });
+
   // Test 3: retry cap
   it("stops after two failed attempts, returns 422, and saves nothing", async () => {
     const fake = fakeGenerator([invalidSpec, invalidSpec, validSpec]);

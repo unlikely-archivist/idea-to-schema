@@ -93,6 +93,23 @@ describe("Workers AI generator", () => {
     expect(result.toolInput).toBe("{not json");
   });
 
+  it("reads GLM's native tool-call text when Workers AI leaves it unconverted", async () => {
+    // Seen from the real API on 2026-11-25: the arguments field held the model's raw format.
+    const reply = structuredClone(toolCallReply);
+    reply.choices[0].message.tool_calls[0].function.arguments =
+      "<tool_call>define_spec<arg_key>title</arg_key><arg_value>Pottery Waitlist</arg_value>\n" +
+      "<arg_key>summary</arg_key><arg_value>Join the list</arg_value>\n" +
+      '<arg_key>fields</arg_key><arg_value>[{"key": "fullName", "label": "Full name", "type": "string", "required": true}]</arg_value></tool_call>';
+    const { fetchFn } = fakeFetch(reply);
+    const result = await createWorkersAiGenerator({ ...config, fetchFn })([{ role: "user", content: "x" }]);
+
+    expect(result.toolInput).toEqual({
+      title: "Pottery Waitlist",
+      summary: "Join the list",
+      fields: [{ key: "fullName", label: "Full name", type: "string", required: true }],
+    });
+  });
+
   it("throws on an HTTP error without leaking the token", async () => {
     const { fetchFn } = fakeFetch({ errors: [{ message: "quota exceeded" }] }, 429);
     const generateSpec = createWorkersAiGenerator({ ...config, fetchFn });

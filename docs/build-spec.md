@@ -51,6 +51,7 @@ The app must cost nothing to run, including when other people try the live demo.
 
 - **Provider:** Cloudflare Workers AI. The free allocation (10,000 Neurons a day, reset at 00:00 UTC) needs no card, and requests past it fail instead of billing.
 - **Model:** a Workers AI model that is available on the Workers Free plan and supports function calling. Using `@cf/zai-org/glm-4.7-flash` (checked 2026-11-25). Free-plan models change, so re-check the catalog if requests start failing.
+- **Known quirk:** Workers AI sometimes returns GLM's native tool-call text (`<tool_call>define_spec<arg_key>…</arg_key><arg_value>…</arg_value>`) in `arguments` instead of JSON. It's intermittent (seen 2026-11-25). The adapter reads that format too.
 - **Not tied to the provider:** the model sits behind the `SpecGenerator` interface (see Tests), so switching providers means writing one new adapter. Nothing else changes.
 - **Smaller model, same design:** a free model breaks the rules more often than a frontier one. The validation gate and repair retry exist for exactly that, so the design holds.
 
@@ -105,6 +106,7 @@ Reject the output if any of these fail. Collect every error, not just the first.
 
 - Attempt 1 fails the gate → send the error list back to the model in the same conversation as the reply to its tool call, asking it to call `define_spec` again with fixes.
 - Attempt 1 has no `define_spec` call → there is no tool call to reply to, so the retry sends a plain user message asking for one.
+- Attempt 1's tool arguments aren't a JSON object (for example, bad JSON) → echoing them back as a tool call is an invalid message that Workers AI rejects with a 400, so the retry sends the error list as a plain user message.
 - Attempt 2 fails → stop. Return 422 with the errors. Save nothing.
 - Max 2 attempts total. The cap is a constant, and a test proves it holds.
 

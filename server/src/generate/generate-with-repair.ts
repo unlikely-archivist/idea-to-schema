@@ -52,6 +52,14 @@ export async function generateWithRepair(
       };
     }
     errors = gate.errors;
+    const fixRequest = `The spec failed validation. Call define_spec again with these fixed:\n${errors.map((e) => `- ${e}`).join("\n")}`;
+
+    // Tool call arguments must be an object. If the model's weren't (bad JSON, say),
+    // echoing them back is an invalid message the provider rejects, so ask in plain text.
+    if (!isPlainObject(result.toolInput)) {
+      messages = [...messages, { role: "user", content: fixRequest }];
+      continue;
+    }
 
     // Same conversation: the model's tool call, then our error list as the reply to it.
     messages = [
@@ -60,10 +68,14 @@ export async function generateWithRepair(
       {
         role: "tool",
         toolCallId: result.toolCallId,
-        content: `The spec failed validation. Call define_spec again with these fixed:\n${errors.map((e) => `- ${e}`).join("\n")}`,
+        content: fixRequest,
       },
     ];
   }
 
   return { ok: false, errors };
+}
+
+function isPlainObject(value: unknown): boolean {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
