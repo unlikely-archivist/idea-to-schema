@@ -41,6 +41,7 @@ Verify current stable versions when installing; don't pin from memory.
 - **AI:** Cloudflare Workers AI, called over its REST API with `fetch` (no SDK). See "Model choice" below.
 - **Tests:** Vitest.
 - **Layout:** one repo, two folders: `web/` and `server/`. No monorepo tooling.
+- **Hosting:** Cloudflare Workers serves the built page as static assets and runs the API from `server/src/worker.ts`. Postgres is Neon's free tier, reached through Hyperdrive (free up to 100,000 queries a day). Render's free tier was ruled out because it sleeps after 15 idle minutes; Fly.io now needs a card. Checked 2026-11-25.
 
 Machine: 2019 Intel MacBook Pro, 16 GB RAM. Docker Desktop is fine. Keep it light.
 
@@ -178,6 +179,8 @@ All JSON. Errors are `{ "error": string, "details"?: string[] }`.
 ## Secrets and config
 
 - `WORKERS_AI_ACCOUNT_ID`, `WORKERS_AI_API_TOKEN` (Workers AI permission only), `DATABASE_URL`, and `TEST_DATABASE_URL` go in `server/.env`. Commit `.env.example` and keep `.env` in `.gitignore`.
+- Don't name app variables `CLOUDFLARE_*`. Wrangler reads `server/.env` and would use the app's narrow token instead of the login.
+- In production, the two Workers AI values are Worker secrets (`wrangler secret put`), and the database comes from the Hyperdrive binding in `server/wrangler.jsonc`.
 - Never log the API token or full prompts in CI output.
 
 ## Tests (Vitest, real Postgres)
@@ -227,7 +230,7 @@ No API token in CI; all tests use the fake.
 7. React page: prompt, result tabs, history, restore, error boundary.
 8. CI workflow green on GitHub.
 9. README: what it does, a screenshot, how to run (docker compose up, migrate, dev), a "Decisions" section, and "What I'd do next" (streaming, diff view, auth).
-10. Deploy. First check current free hosting and free Postgres options on the web. Add the rate limit and daily cap before going live. Size the daily cap from step 6's token counts so it stays under the free Workers AI allocation.
+10. Deploy. First check current free hosting and free Postgres options on the web. Add the rate limit and daily cap before going live. Size the daily cap from step 6's token counts so it stays under the free Workers AI allocation. Result: 150 generations a day (worst case about 7,500 of the 10,000 free neurons), counted in Postgres; 10 POST requests a minute per IP through Cloudflare's rate limiting binding, which is approximate and let about 20 extra requests through a burst before holding.
 
 If time runs short, stop after step 8. A tested backend with a plain UI beats a pretty, untested one.
 
