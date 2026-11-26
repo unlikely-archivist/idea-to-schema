@@ -4,7 +4,7 @@ Handoff for a Claude Code session building this with Eryn. Read all of it before
 
 ## What it is
 
-A small web app. The user types a feature idea in plain English ("a sign-up form for a pottery class waitlist"). Claude returns a structured field list. The server validates it, then generates three things from it in code: a JSON Schema, a TypeScript interface, and a live form preview. Every generation is saved as an immutable revision the user can browse and restore.
+A small web app. The user types a feature idea in plain English ("a sign-up form for a pottery class waitlist"). An AI model returns a structured field list. The server validates it, then generates three things from it in code: a JSON Schema, a TypeScript interface, and a live form preview. Every generation is saved as an immutable revision the user can browse and restore.
 
 ## Working rule: Eryn must be able to explain every line
 
@@ -13,7 +13,7 @@ Interviews will ask Eryn to defend this code. So:
 - Build in the order below, one step at a time. After each step, explain in plain words what was built and why, and wait for Eryn to say go.
 - Prefer boring, readable code over clever code. No abstractions for single-use code.
 - Eryn writes the README's "Decisions" section in their own words. Draft notes for it if asked; don't write the final version.
-- One branch and PR per step. Eryn reviews and merges. On the PRs for steps 4, 5, 6, and 10 (retry and idempotency, concurrency, the Claude adapter, deploy security), run the `typescript-reviewer` agent first and answer its comments in the PR. Skip it on the other steps.
+- One branch and PR per step. Eryn reviews and merges. On the PRs for steps 4, 5, 6, and 10 (retry and idempotency, concurrency, the model adapter, deploy security), run the `typescript-reviewer` agent first and answer its comments in the PR. Skip it on the other steps.
 
 ## Scope
 
@@ -21,7 +21,7 @@ Interviews will ask Eryn to defend this code. So:
 - one page: prompt box, Generate button, result panel, revision history with restore
 - API with the routes below
 - Postgres in Docker, Drizzle ORM, migrations
-- Claude tool calling with a fixed input schema; zod validation; one repair retry
+- LLM tool calling with a fixed input schema; zod validation; one repair retry
 - per-revision logging of tokens, latency, and attempts
 - idempotent generate requests; restore creates a new revision
 - integration tests against real Postgres; GitHub Actions CI
@@ -39,22 +39,31 @@ Verify current stable versions when installing; don't pin from memory.
 - **Server:** Node + Hono (`@hono/node-server`), TypeScript, run with `tsx` in dev.
 - **Database:** PostgreSQL via `docker-compose.yml`, Drizzle ORM + drizzle-kit migrations.
 - **Validation:** zod.
-- **AI:** official Anthropic TypeScript SDK. Use the latest Claude Sonnet model; check the current model ID in Anthropic's docs.
+- **AI:** Cloudflare Workers AI, called over its REST API with `fetch` (no SDK). See "Model choice" below.
 - **Tests:** Vitest.
 - **Layout:** one repo, two folders: `web/` and `server/`. No monorepo tooling.
 
 Machine: 2019 Intel MacBook Pro, 16 GB RAM. Docker Desktop is fine. Keep it light.
 
+## Model choice
+
+The app must cost nothing to run, including when other people try the live demo. That rules out paid APIs such as Anthropic's or OpenAI's.
+
+- **Provider:** Cloudflare Workers AI. The free allocation (10,000 Neurons a day, reset at 00:00 UTC) needs no card, and requests past it fail instead of billing.
+- **Model:** a Workers AI model that is available on the Workers Free plan and supports function calling. At the time of writing that includes `@cf/zai-org/glm-4.7-flash`. Re-check the model catalog in step 6, because free-plan models change.
+- **Not tied to the provider:** the model sits behind the `SpecGenerator` interface (see Tests), so switching providers means writing one new adapter. Nothing else changes.
+- **Smaller model, same design:** a free model breaks the rules more often than a frontier one. The validation gate and repair retry exist for exactly that, so the design holds.
+
 ## Core design: the model writes data, code writes TypeScript
 
-Claude never writes TypeScript or JSON Schema directly. It returns a field list through a tool call. The server turns that list into the schema, the interface, and the form. Generated output can't contain broken code, and the validation gate has something precise to check.
+The model never writes TypeScript or JSON Schema directly. It returns a field list through a tool call. The server turns that list into the schema, the interface, and the form. Generated output can't contain broken code, and the validation gate has something precise to check.
 
 ### Tool the model must call: `define_spec`
 
 ```json
 {
   "name": "define_spec",
-  "input_schema": {
+  "parameters": {
     "type": "object",
     "required": ["title", "summary", "fields"],
     "properties": {
@@ -80,7 +89,7 @@ Claude never writes TypeScript or JSON Schema directly. It returns a field list 
 }
 ```
 
-Force the tool with `tool_choice: { type: "tool", name: "define_spec" }`.
+Force the tool with `tool_choice` where the model supports it (check in step 6). If the model replies without calling `define_spec`, count that as a failed attempt.
 
 ### Validation gate (server, zod + plain checks)
 
@@ -94,7 +103,7 @@ Reject the output if any of these fail. Collect every error, not just the first.
 
 ### Repair retry
 
-- Attempt 1 fails the gate → send the error list back to Claude in the same conversation as a `tool_result` with `is_error: true`, asking it to call `define_spec` again with fixes.
+- Attempt 1 fails the gate → send the error list back to the model in the same conversation as the reply to its tool call, asking it to call `define_spec` again with fixes.
 - Attempt 2 fails → stop. Return 422 with the errors. Save nothing.
 - Max 2 attempts total. The cap is a constant, and a test proves it holds.
 
@@ -127,7 +136,7 @@ Reject the output if any of these fail. Collect every error, not just the first.
 ### Concurrency and idempotency rules
 
 - New revision: in one transaction, read `max(version)` for the spec and insert `max + 1`. If the unique `(spec_id, version)` constraint fires, return 409 so the client can refresh. Don't retry silently.
-- Generate requests carry an `Idempotency-Key` header, a UUID the client makes once per click. Before calling Claude, look for an existing revision with that `(spec_id, idempotency_key)`. If one exists, return it with 200 and no model call. A unique constraint backs this up if two requests race.
+- Generate requests carry an `Idempotency-Key` header, a UUID the client makes once per click. Before calling the model, look for an existing revision with that `(spec_id, idempotency_key)`. If one exists, return it with 200 and no model call. A unique constraint backs this up if two requests race.
 - Restore never edits old rows. It inserts a new revision copying `spec_json`, with `restored_from` set.
 
 ## API
@@ -166,12 +175,12 @@ All JSON. Errors are `{ "error": string, "details"?: string[] }`.
 
 ## Secrets and config
 
-- `ANTHROPIC_API_KEY` and `DATABASE_URL` go in `server/.env`. Commit `.env.example` and keep `.env` in `.gitignore`.
-- Never log the API key or full prompts in CI output.
+- `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` (Workers AI permission only), `DATABASE_URL`, and `TEST_DATABASE_URL` go in `server/.env`. Commit `.env.example` and keep `.env` in `.gitignore`.
+- Never log the API token or full prompts in CI output.
 
 ## Tests (Vitest, real Postgres)
 
-The Claude call sits behind a small interface (`generateSpec(messages) → { toolInput, usage }`), so tests swap in a fake. Integration tests run against the docker-compose Postgres locally and a service container in CI, with a migrated database that gets truncated between tests.
+The model call sits behind a small, provider-neutral interface (`generateSpec(messages) → { toolCallId, toolInput, usage, model }`), so tests swap in a fake. Integration tests run against the docker-compose Postgres locally and a service container in CI, with a separate test database (`TEST_DATABASE_URL`) that is created and migrated before the run and truncated between tests, so tests never wipe dev data.
 
 Must-have tests:
 
@@ -203,7 +212,7 @@ Must-have tests:
 4. Type-check both packages (`tsc --noEmit`).
 5. Run Vitest.
 
-No API key in CI; all tests use the fake.
+No API token in CI; all tests use the fake.
 
 ## Build order (checkpoint after each)
 
@@ -212,22 +221,23 @@ No API key in CI; all tests use the fake.
 3. Zod gate + generators + unit tests (tests 1 and 6). No network yet.
 4. Generate route with the fake generator, repair retry, idempotency (tests 2–4).
 5. Restore and revisions list (test 5), then the concurrency test (test 7).
-6. Real Claude adapter. One manual test with a real key.
+6. Real Workers AI adapter. One manual test with a real token. Record the tokens a typical generation uses.
 7. React page: prompt, result tabs, history, restore, error boundary.
 8. CI workflow green on GitHub.
 9. README: what it does, a screenshot, how to run (docker compose up, migrate, dev), Eryn's "Decisions" section, and "What I'd do next" (streaming, diff view, auth).
-10. Deploy. First check current free hosting and free Postgres options on the web. Add the rate limit and daily cap before going live.
+10. Deploy. First check current free hosting and free Postgres options on the web. Add the rate limit and daily cap before going live. Size the daily cap from step 6's token counts so it stays under the free Workers AI allocation.
 
 If time runs short, stop after step 8. A tested backend with a plain UI beats a pretty, untested one.
 
 ## Done means
 
-- **Fresh clone:** `docker compose up -d`, migrate, then dev. The app works with a real key.
+- **Fresh clone:** `docker compose up -d`, migrate, then dev. The app works with a real Cloudflare token.
 - **Live:** the deployed site works, and the rate limit and daily cap hold.
 - **Tests and CI:** all 7 test groups pass locally and in CI.
 - **Explainable:** Eryn can answer each of these without notes:
   - Why does the model output data instead of code?
   - What happens if two Generate clicks race?
-  - What happens if Claude fails validation twice?
+  - What happens if the model fails validation twice?
+  - Why Workers AI, and what would switching providers take?
   - Why are revisions append-only?
 
