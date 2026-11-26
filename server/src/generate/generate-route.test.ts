@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../app.js";
 import { revisions } from "../db/schema.js";
-import { createTestDb, fakeGenerator, invalidSpec, truncateAll, validSpec } from "../test/test-helpers.js";
+import { createTestDb, fakeGenerator, invalidSpec, NO_TOOL_CALL, truncateAll, validSpec } from "../test/test-helpers.js";
 import { MAX_ATTEMPTS } from "./generate-with-repair.js";
 import type { SpecGenerator } from "./spec-generator.js";
 
@@ -54,6 +54,18 @@ describe("POST /api/specs/:id/generate", () => {
     expect(secondCall[1]).toEqual({ role: "assistant", toolCall: { id: "call-1", input: invalidSpec } });
     expect(secondCall[2]).toMatchObject({ role: "tool", toolCallId: "call-1" });
     expect(secondCall[2]).toHaveProperty("content", expect.stringContaining('fields[0].key: "Full Name" must be camelCase'));
+  });
+
+  it("counts a reply without a define_spec call as a failed attempt", async () => {
+    const fake = fakeGenerator([NO_TOOL_CALL, validSpec]);
+    const { app, specId } = await createSpec(fake.generateSpec);
+
+    const res = await generate(app, specId, randomUUID(), { prompt: "a pottery waitlist" });
+
+    expect(res.status).toBe(201);
+    expect((await res.json()).attempts).toBe(2);
+    // No tool call to reply to, so the nudge goes back as a plain user message.
+    expect(fake.calls[1][1]).toEqual({ role: "user", content: expect.stringContaining("define_spec") });
   });
 
   // Test 3: retry cap
