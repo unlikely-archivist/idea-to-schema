@@ -1,6 +1,6 @@
 # idea-to-schema
 
-Type a feature idea in plain English, such as "a sign-up form for a pottery class waitlist". You get back a JSON Schema, a TypeScript interface, and a live form preview. Every generation is saved as a revision you can browse and restore.
+Type a feature idea in plain English, such as "a sign-up form for a pottery class waitlist". You get back a live form preview, a TypeScript interface, a Zod validator, a JSON Schema, and a Postgres `CREATE TABLE` statement. Every generation is saved as a revision you can browse and restore.
 
 Live demo: https://idea-to-schema.unlikelyarchive.workers.dev
 
@@ -11,7 +11,7 @@ Live demo: https://idea-to-schema.unlikelyarchive.workers.dev
 1. The browser sends your idea to the server.
 2. The server asks an AI model (GLM-4.7-Flash on Cloudflare Workers AI) to call one tool, `define_spec`, with a title, a summary, and a list of fields.
 3. The server checks that field list against strict rules. If it fails, the model gets the list of errors and one more try.
-4. Plain TypeScript functions turn the checked field list into the JSON Schema and the TypeScript interface. React renders the form preview from the same list.
+4. Plain TypeScript functions turn the checked field list into the TypeScript interface, the Zod validator, the JSON Schema, and the SQL table. React renders the form preview from the same list.
 5. The result is saved to Postgres as a new revision.
 
 ## Run it locally

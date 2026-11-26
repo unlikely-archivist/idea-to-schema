@@ -4,7 +4,7 @@ Handoff for a Claude Code session building this with Eryn. Read all of it before
 
 ## What it is
 
-A small web app. The user types a feature idea in plain English ("a sign-up form for a pottery class waitlist"). An AI model returns a structured field list. The server validates it, then generates three things from it in code: a JSON Schema, a TypeScript interface, and a live form preview. Every generation is saved as an immutable revision the user can browse and restore.
+A small web app. The user types a feature idea in plain English ("a sign-up form for a pottery class waitlist"). An AI model returns a structured field list. The server validates it, then generates five things from it in code: a live form preview, a TypeScript interface, a Zod validator, a JSON Schema, and a Postgres `CREATE TABLE` statement. Every generation is saved as an immutable revision the user can browse and restore.
 
 ## Working rule: Eryn must be able to explain every line
 
@@ -114,6 +114,9 @@ Reject the output if any of these fail. Collect every error, not just the first.
 
 - `toJsonSchema(spec)`: draft 2020-12 object schema. `email` → `format: "email"`, `date` → `format: "date"`, `enum` → `enum: [...]`, `text` → string.
 - `toTypeScript(spec)`: an `interface` named from the title in PascalCase. Optional fields get `?`. Enums become string-literal unions.
+- `toZod(spec)`: Zod 4 code, `z.object` named `<PascalCaseTitle>Schema`. `date` → `z.iso.date()`, `email` → `z.email()`, `enum` → `z.enum([...])`. Optional fields get `.optional()`.
+- `toPostgresTable(spec)`: a `CREATE TABLE` named from the title in snake_case, with a `uuid` primary key (`record_id` if a field is called `id`). Every identifier is double-quoted so reserved words work. `number` → `numeric`, enums → `text` with a `CHECK`. Required fields are `NOT NULL`.
+- Tests run the generated Zod code with real Zod and create the generated table in the test database, so the text is proven to work, not just to look right.
 - The form preview in React renders from the spec, not from generated code.
 
 ## Data model (Postgres, Drizzle)
@@ -157,7 +160,7 @@ All JSON. Errors are `{ "error": string, "details"?: string[] }`.
 - **Unknown spec or revision:** 404.
 - **Missing Idempotency-Key:** 400.
 - **Gate failed twice:** 422 with `details`.
-- **Every revision response** includes `jsonSchema` and `typescript`, generated from `spec_json` on read. Don't store them.
+- **Every revision response** includes `jsonSchema`, `typescript`, `zod`, and `sql`, generated from `spec_json` on read. Don't store them.
 
 ## Frontend
 
@@ -174,7 +177,7 @@ All JSON. Errors are `{ "error": string, "details"?: string[] }`.
   - focus moves to the result heading after a generate
   - visible focus styles
   - color contrast at least 4.5:1
-- **Copy buttons:** one each for the TypeScript and JSON Schema tabs.
+- **Copy buttons:** one on each code tab (TypeScript, JSON Schema, Zod, SQL).
 
 ## Secrets and config
 

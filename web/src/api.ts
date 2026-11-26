@@ -28,6 +28,8 @@ export type Revision = {
   createdAt: string;
   jsonSchema: object;
   typescript: string;
+  zod: string;
+  sql: string;
 };
 
 // Thrown for any non-2xx response, carrying the server's { error, details? } body.

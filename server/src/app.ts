@@ -6,7 +6,7 @@ import { insertRevision, uniqueViolation, type Revision } from "./db/insert-revi
 import { dailyUsage, revisions, specs } from "./db/schema.js";
 import { generateWithRepair } from "./generate/generate-with-repair.js";
 import type { SpecGenerator } from "./generate/spec-generator.js";
-import { toJsonSchema, toTypeScript } from "./spec/generators.js";
+import { toJsonSchema, toPostgresTable, toTypeScript, toZod } from "./spec/generators.js";
 
 const GenerateBody = z.object({ prompt: z.string().min(1).max(2000) });
 const Uuid = z.uuid();
@@ -186,7 +186,13 @@ function findByIdempotencyKey(db: Db, specId: string, idempotencyKey: string) {
   });
 }
 
-// jsonSchema and typescript are generated on read, never stored.
+// The outputs are generated on read, never stored.
 function toResponse(row: Revision) {
-  return { ...row, jsonSchema: toJsonSchema(row.specJson), typescript: toTypeScript(row.specJson) };
+  return {
+    ...row,
+    jsonSchema: toJsonSchema(row.specJson),
+    typescript: toTypeScript(row.specJson),
+    zod: toZod(row.specJson),
+    sql: toPostgresTable(row.specJson),
+  };
 }
