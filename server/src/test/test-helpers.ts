@@ -12,15 +12,19 @@ export async function truncateAll(db: Db) {
   await db.execute(sql`TRUNCATE revisions, specs`);
 }
 
+// Pass this in place of a tool input to make the fake reply without calling define_spec.
+export const NO_TOOL_CALL = Symbol("no tool call");
+
 // A stand-in for the model: returns the given tool inputs in order and
 // records the messages it received on each call.
 export function fakeGenerator(toolInputs: unknown[]) {
   const calls: Message[][] = [];
   const generateSpec: SpecGenerator = async (messages) => {
     calls.push(messages);
+    const toolInput = toolInputs[calls.length - 1];
     const result: GeneratorResult = {
-      toolCallId: `call-${calls.length}`,
-      toolInput: toolInputs[calls.length - 1],
+      toolCallId: toolInput === NO_TOOL_CALL ? null : `call-${calls.length}`,
+      toolInput: toolInput === NO_TOOL_CALL ? undefined : toolInput,
       usage: { inputTokens: 100, outputTokens: 50 },
       model: "fake-model",
     };

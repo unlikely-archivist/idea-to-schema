@@ -9,7 +9,7 @@ export type Message =
   | { role: "tool"; toolCallId: string; content: string }; // our reply to a tool call
 
 export type GeneratorResult = {
-  toolCallId: string; // lets a repair retry reply to this exact call
+  toolCallId: string | null; // lets a repair retry reply to this exact call; null = the model didn't call define_spec
   toolInput: unknown; // untrusted until it passes checkSpec
   usage: { inputTokens: number; outputTokens: number };
   model: string;

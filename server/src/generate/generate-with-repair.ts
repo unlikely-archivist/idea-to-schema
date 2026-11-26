@@ -31,6 +31,14 @@ export async function generateWithRepair(
     inputTokens += result.usage.inputTokens;
     outputTokens += result.usage.outputTokens;
 
+    // Replied in plain text instead of calling the tool: a failed attempt, and
+    // there's no tool call to reply to, so nudge with a user message instead.
+    if (result.toolCallId === null) {
+      errors = ["The model replied without calling define_spec"];
+      messages = [...messages, { role: "user", content: "Reply only by calling define_spec." }];
+      continue;
+    }
+
     const gate = checkSpec(result.toolInput);
     if (gate.ok) {
       return {

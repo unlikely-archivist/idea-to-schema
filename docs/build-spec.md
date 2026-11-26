@@ -50,7 +50,7 @@ Machine: 2019 Intel MacBook Pro, 16 GB RAM. Docker Desktop is fine. Keep it ligh
 The app must cost nothing to run, including when other people try the live demo. That rules out paid APIs such as Anthropic's or OpenAI's.
 
 - **Provider:** Cloudflare Workers AI. The free allocation (10,000 Neurons a day, reset at 00:00 UTC) needs no card, and requests past it fail instead of billing.
-- **Model:** a Workers AI model that is available on the Workers Free plan and supports function calling. At the time of writing that includes `@cf/zai-org/glm-4.7-flash`. Re-check the model catalog in step 6, because free-plan models change.
+- **Model:** a Workers AI model that is available on the Workers Free plan and supports function calling. Using `@cf/zai-org/glm-4.7-flash` (checked 2026-11-25). Free-plan models change, so re-check the catalog if requests start failing.
 - **Not tied to the provider:** the model sits behind the `SpecGenerator` interface (see Tests), so switching providers means writing one new adapter. Nothing else changes.
 - **Smaller model, same design:** a free model breaks the rules more often than a frontier one. The validation gate and repair retry exist for exactly that, so the design holds.
 
@@ -89,7 +89,7 @@ The model never writes TypeScript or JSON Schema directly. It returns a field li
 }
 ```
 
-Force the tool with `tool_choice` where the model supports it (check in step 6). If the model replies without calling `define_spec`, count that as a failed attempt.
+Force the tool with `tool_choice`. GLM-4.7-Flash accepts it. If the model replies without calling `define_spec`, count that as a failed attempt.
 
 ### Validation gate (server, zod + plain checks)
 
@@ -104,6 +104,7 @@ Reject the output if any of these fail. Collect every error, not just the first.
 ### Repair retry
 
 - Attempt 1 fails the gate → send the error list back to the model in the same conversation as the reply to its tool call, asking it to call `define_spec` again with fixes.
+- Attempt 1 has no `define_spec` call → there is no tool call to reply to, so the retry sends a plain user message asking for one.
 - Attempt 2 fails → stop. Return 422 with the errors. Save nothing.
 - Max 2 attempts total. The cap is a constant, and a test proves it holds.
 
@@ -221,7 +222,7 @@ No API token in CI; all tests use the fake.
 3. Zod gate + generators + unit tests (tests 1 and 6). No network yet.
 4. Generate route with the fake generator, repair retry, idempotency (tests 2–4).
 5. Restore and revisions list (test 5), then the concurrency test (test 7).
-6. Real Workers AI adapter. One manual test with a real token. Record the tokens a typical generation uses.
+6. Real Workers AI adapter. One manual test with a real token. Record the tokens a typical generation uses. Result (one test, a 5-field form, passed on attempt 1): 371 input, 540 output, 8.8 s.
 7. React page: prompt, result tabs, history, restore, error boundary.
 8. CI workflow green on GitHub.
 9. README: what it does, a screenshot, how to run (docker compose up, migrate, dev), Eryn's "Decisions" section, and "What I'd do next" (streaming, diff view, auth).
