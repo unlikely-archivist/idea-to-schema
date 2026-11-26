@@ -1,6 +1,7 @@
+import { existsSync } from "node:fs";
 import { defineConfig } from "drizzle-kit";
 
-process.loadEnvFile();
+if (existsSync(".env")) process.loadEnvFile(); // CI sets env vars directly
 
 export default defineConfig({
   dialect: "postgresql",
