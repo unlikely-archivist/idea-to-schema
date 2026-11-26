@@ -10,9 +10,9 @@ const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is not set");
 const db = createDb(databaseUrl);
 
-const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
-const apiToken = process.env.CLOUDFLARE_API_TOKEN;
-if (!accountId || !apiToken) throw new Error("CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN must be set");
+const accountId = process.env.WORKERS_AI_ACCOUNT_ID;
+const apiToken = process.env.WORKERS_AI_API_TOKEN;
+if (!accountId || !apiToken) throw new Error("WORKERS_AI_ACCOUNT_ID and WORKERS_AI_API_TOKEN must be set");
 const generateSpec = createWorkersAiGenerator({ accountId, apiToken });
 
 const app = createApp(db, generateSpec);

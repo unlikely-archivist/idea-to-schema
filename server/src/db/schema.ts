@@ -1,4 +1,5 @@
 import {
+  date,
   integer,
   jsonb,
   pgTable,
@@ -40,3 +41,10 @@ export const revisions = pgTable(
     unique("revisions_spec_id_idempotency_key_unique").on(table.specId, table.idempotencyKey),
   ],
 );
+
+// One row per UTC day, counting generate requests that reached the model.
+// The daily cap reads and increments it in one statement, so it holds across Cloudflare locations.
+export const dailyUsage = pgTable("daily_usage", {
+  day: date("day").primaryKey(),
+  generations: integer("generations").notNull(),
+});
