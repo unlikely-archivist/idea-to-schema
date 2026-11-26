@@ -12,7 +12,6 @@ Interviews will ask Eryn to defend this code. So:
 
 - Build in the order below, one step at a time. After each step, explain in plain words what was built and why, and wait for Eryn to say go.
 - Prefer boring, readable code over clever code. No abstractions for single-use code.
-- Eryn writes the README's "Decisions" section in their own words. Draft notes for it if asked; don't write the final version.
 - One branch and PR per step. Eryn reviews and merges. On the PRs for steps 4, 5, 6, and 10 (retry and idempotency, concurrency, the model adapter, deploy security), run the `typescript-reviewer` agent first and answer its comments in the PR. Skip it on the other steps.
 
 ## Scope
@@ -227,7 +226,7 @@ No API token in CI; all tests use the fake.
 6. Real Workers AI adapter. One manual test with a real token. Record the tokens a typical generation uses. Result (one test, a 5-field form, passed on attempt 1): 371 input, 540 output, 8.8 s.
 7. React page: prompt, result tabs, history, restore, error boundary.
 8. CI workflow green on GitHub.
-9. README: what it does, a screenshot, how to run (docker compose up, migrate, dev), Eryn's "Decisions" section, and "What I'd do next" (streaming, diff view, auth).
+9. README: what it does, a screenshot, how to run (docker compose up, migrate, dev), a "Decisions" section, and "What I'd do next" (streaming, diff view, auth).
 10. Deploy. First check current free hosting and free Postgres options on the web. Add the rate limit and daily cap before going live. Size the daily cap from step 6's token counts so it stays under the free Workers AI allocation.
 
 If time runs short, stop after step 8. A tested backend with a plain UI beats a pretty, untested one.
