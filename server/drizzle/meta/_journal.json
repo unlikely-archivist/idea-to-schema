@@ -8,6 +8,13 @@
       "when": 1795652702028,
       "tag": "0000_create-specs-and-revisions",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1795658621752,
+      "tag": "0001_add-daily-usage",
+      "breakpoints": true
     }
   ]
 }

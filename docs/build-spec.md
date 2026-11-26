@@ -4,7 +4,7 @@ Handoff for a Claude Code session building this with Eryn. Read all of it before
 
 ## What it is
 
-A small web app. The user types a feature idea in plain English ("a sign-up form for a pottery class waitlist"). An AI model returns a structured field list. The server validates it, then generates three things from it in code: a JSON Schema, a TypeScript interface, and a live form preview. Every generation is saved as an immutable revision the user can browse and restore.
+A small web app. The user types a feature idea in plain English ("a sign-up form for a pottery class waitlist"). An AI model returns a structured field list. The server validates it, then generates five things from it in code: a live form preview, a TypeScript interface, a Zod validator, a JSON Schema, and a Postgres `CREATE TABLE` statement. Every generation is saved as an immutable revision the user can browse and restore.
 
 ## Working rule: Eryn must be able to explain every line
 
@@ -41,6 +41,7 @@ Verify current stable versions when installing; don't pin from memory.
 - **AI:** Cloudflare Workers AI, called over its REST API with `fetch` (no SDK). See "Model choice" below.
 - **Tests:** Vitest.
 - **Layout:** one repo, two folders: `web/` and `server/`. No monorepo tooling.
+- **Hosting:** Cloudflare Workers serves the built page as static assets and runs the API from `server/src/worker.ts`. Postgres is Neon's free tier, reached through Hyperdrive (free up to 100,000 queries a day) with query caching off, since cached reads aren't cleared on writes and would break the idempotency lookup. Render's free tier was ruled out because it sleeps after 15 idle minutes; Fly.io now needs a card. Checked 2026-11-25.
 
 Machine: 2019 Intel MacBook Pro, 16 GB RAM. Docker Desktop is fine. Keep it light.
 
@@ -113,6 +114,9 @@ Reject the output if any of these fail. Collect every error, not just the first.
 
 - `toJsonSchema(spec)`: draft 2020-12 object schema. `email` → `format: "email"`, `date` → `format: "date"`, `enum` → `enum: [...]`, `text` → string.
 - `toTypeScript(spec)`: an `interface` named from the title in PascalCase. Optional fields get `?`. Enums become string-literal unions.
+- `toZod(spec)`: Zod 4 code, `z.object` named `<PascalCaseTitle>Schema`. `date` → `z.iso.date()`, `email` → `z.email()`, `enum` → `z.enum([...])`. Optional fields get `.optional()`.
+- `toPostgresTable(spec)`: a `CREATE TABLE` named from the title in snake_case, with a `uuid` primary key (`record_id` if a field is called `id`). Every identifier is double-quoted so reserved words work. `number` → `numeric`, enums → `text` with a `CHECK`. Required fields are `NOT NULL`.
+- Tests run the generated Zod code with real Zod and create the generated table in the test database, so the text is proven to work, not just to look right.
 - The form preview in React renders from the spec, not from generated code.
 
 ## Data model (Postgres, Drizzle)
@@ -156,7 +160,7 @@ All JSON. Errors are `{ "error": string, "details"?: string[] }`.
 - **Unknown spec or revision:** 404.
 - **Missing Idempotency-Key:** 400.
 - **Gate failed twice:** 422 with `details`.
-- **Every revision response** includes `jsonSchema` and `typescript`, generated from `spec_json` on read. Don't store them.
+- **Every revision response** includes `jsonSchema`, `typescript`, `zod`, and `sql`, generated from `spec_json` on read. Don't store them.
 
 ## Frontend
 
@@ -173,11 +177,13 @@ All JSON. Errors are `{ "error": string, "details"?: string[] }`.
   - focus moves to the result heading after a generate
   - visible focus styles
   - color contrast at least 4.5:1
-- **Copy buttons:** one each for the TypeScript and JSON Schema tabs.
+- **Copy buttons:** one on each code tab (TypeScript, JSON Schema, Zod, SQL).
 
 ## Secrets and config
 
-- `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` (Workers AI permission only), `DATABASE_URL`, and `TEST_DATABASE_URL` go in `server/.env`. Commit `.env.example` and keep `.env` in `.gitignore`.
+- `WORKERS_AI_ACCOUNT_ID`, `WORKERS_AI_API_TOKEN` (Workers AI permission only), `DATABASE_URL`, and `TEST_DATABASE_URL` go in `server/.env`. Commit `.env.example` and keep `.env` in `.gitignore`.
+- Don't name app variables `CLOUDFLARE_*`. Wrangler reads `server/.env` and would use the app's narrow token instead of the login.
+- In production, the two Workers AI values are Worker secrets (`wrangler secret put`), and the database comes from the Hyperdrive binding in `server/wrangler.jsonc`.
 - Never log the API token or full prompts in CI output.
 
 ## Tests (Vitest, real Postgres)
@@ -227,7 +233,7 @@ No API token in CI; all tests use the fake.
 7. React page: prompt, result tabs, history, restore, error boundary.
 8. CI workflow green on GitHub.
 9. README: what it does, a screenshot, how to run (docker compose up, migrate, dev), a "Decisions" section, and "What I'd do next" (streaming, diff view, auth).
-10. Deploy. First check current free hosting and free Postgres options on the web. Add the rate limit and daily cap before going live. Size the daily cap from step 6's token counts so it stays under the free Workers AI allocation.
+10. Deploy. First check current free hosting and free Postgres options on the web. Add the rate limit and daily cap before going live. Size the daily cap from step 6's token counts so it stays under the free Workers AI allocation. Result: 150 generations a day (worst case about 7,500 of the 10,000 free neurons), counted in Postgres; 10 POST requests a minute per IP through Cloudflare's rate limiting binding, which is approximate and let about 20 extra requests through a burst before holding.
 
 If time runs short, stop after step 8. A tested backend with a plain UI beats a pretty, untested one.
 

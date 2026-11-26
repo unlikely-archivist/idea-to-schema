@@ -7,6 +7,8 @@ const TABS = [
   { id: "form", label: "Form preview" },
   { id: "typescript", label: "TypeScript" },
   { id: "schema", label: "JSON Schema" },
+  { id: "zod", label: "Zod" },
+  { id: "sql", label: "SQL" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -63,6 +65,8 @@ export function ResultTabs({ revision }: { revision: Revision }) {
         )}
         {active === "typescript" && <CodeBlock code={revision.typescript} label="TypeScript" />}
         {active === "schema" && <CodeBlock code={schemaText} label="JSON Schema" />}
+        {active === "zod" && <CodeBlock code={revision.zod} label="Zod" />}
+        {active === "sql" && <CodeBlock code={revision.sql} label="SQL" />}
       </div>
     </div>
   );

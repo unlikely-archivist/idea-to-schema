@@ -105,7 +105,7 @@ export default function App() {
     <main>
       <header>
         <h1>idea-to-schema</h1>
-        <p className="muted">Describe a form in plain English. Get a JSON Schema, a TypeScript interface, and a live preview.</p>
+        <p className="muted">Describe a form in plain English. Get a live form preview, a TypeScript interface, a Zod validator, a JSON Schema, and a Postgres table.</p>
       </header>
 
       <form className="prompt" onSubmit={handleGenerate}>

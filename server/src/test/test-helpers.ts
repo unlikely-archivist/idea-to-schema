@@ -9,7 +9,7 @@ export function createTestDb(): Db {
 }
 
 export async function truncateAll(db: Db) {
-  await db.execute(sql`TRUNCATE revisions, specs`);
+  await db.execute(sql`TRUNCATE revisions, specs, daily_usage`);
 }
 
 // Pass this in place of a tool input to make the fake reply without calling define_spec.
